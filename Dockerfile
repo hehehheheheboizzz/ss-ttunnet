@@ -18,9 +18,9 @@ RUN useradd -m trthaodev && \
 RUN echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
     echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
 
-# 3. Cài đặt Tunnelmole (tmole)
-# Tải trực tiếp file binary về
-RUN curl -L https://tunnelmole.com/downloads/tmole-linux-amd64 -o /usr/local/bin/tmole && \
+# 3. Cài đặt Tunnelmole (FIX LINK TẢI)
+# Sử dụng link trực tiếp từ GitHub Release để tránh lỗi HTML
+RUN curl -L https://github.com/robbie-cahill/tunnelmole-client/releases/latest/download/tmole-linux-amd64 -o /usr/local/bin/tmole && \
     chmod +x /usr/local/bin/tmole
 
 # 4. Script chạy Tunnelmole TCP
@@ -28,11 +28,11 @@ RUN echo '#!/bin/bash' > /start.sh && \
     echo 'service ssh start' >> /start.sh && \
     echo 'echo "=== DANG KHOI TAO TUNNELMOLE ==="' >> /start.sh && \
     echo 'echo "Doi 5 giay..."' >> /start.sh && \
-    # Chạy tmole ở chế độ background cho port 22
+    # Chạy tmole background cho port 22
     echo 'tmole 22 > /var/log/tmole.log 2>&1 &' >> /start.sh && \
     echo 'sleep 5' >> /start.sh && \
     echo 'echo "=== THONG TIN NHAP VAO BITVISE ==="' >> /start.sh && \
-    # Lọc lấy dòng chứa địa chỉ tcp://
+    # Lọc log để lấy địa chỉ
     echo 'grep "tcp://" /var/log/tmole.log' >> /start.sh && \
     echo 'echo "=================================="' >> /start.sh && \
     echo 'echo "Server dang chay..."' >> /start.sh && \
