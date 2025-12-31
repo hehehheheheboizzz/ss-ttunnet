@@ -1,49 +1,62 @@
 FROM ubuntu:22.04
 
-# 1. Cài đặt môi trường
+# --- 1. CÀI ĐẶT MÔI TRƯỜNG CƠ BẢN ---
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
-    openssh-server \
     curl \
     wget \
-    tar \
     sudo \
-    python3 \
-    && mkdir /var/run/sshd
+    nano \
+    ca-certificates \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Tạo User 'trthaodev' (Pass: thaodev@)
-RUN useradd -m trthaodev && \
+# --- 2. TẠO USER 'trthaodev' (Full quyền sudo) ---
+RUN useradd -m -s /bin/bash trthaodev && \
     echo "trthaodev:thaodev@" | chpasswd && \
-    adduser trthaodev sudo
+    usermod -aG sudo trthaodev && \
+    echo "trthaodev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Cấu hình SSH
-RUN echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
-    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+# --- 3. CÀI ĐẶT CLOUDFLARED (Tunnel xịn) ---
+RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
+    dpkg -i cloudflared-linux-amd64.deb && \
+    rm cloudflared-linux-amd64.deb
 
-# 3. Cài đặt Bore (Link GitHub chuẩn, không bao giờ chết)
-RUN wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz && \
-    tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz && \
-    mv bore /usr/local/bin/bore && \
-    rm bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz && \
-    chmod +x /usr/local/bin/bore
+# --- 4. CÀI ĐẶT FILEBROWSER (Quản lý file + Terminal trên web) ---
+RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
 
-# 4. Script chạy Bore TCP
+# --- 5. SCRIPT KHỞI ĐỘNG THÔNG MINH ---
 RUN echo '#!/bin/bash' > /start.sh && \
-    echo 'service ssh start' >> /start.sh && \
-    echo 'echo "=== DANG KHOI TAO BORE ==="' >> /start.sh && \
-    echo 'echo "Doi 3 giay..."' >> /start.sh && \
-    # Chạy bore kết nối tới server công cộng bore.pub
-    echo 'nohup bore local 22 --to bore.pub > /var/log/bore.log 2>&1 &' >> /start.sh && \
+    echo 'echo "=== KHOI TAO SERVER ==="' >> /start.sh && \
+    echo '' >> /start.sh && \
+    # 1. Chạy FileBrowser (Cổng 8080, Root path, Không pass)
+    echo 'echo "1. Dang chay FileBrowser..."' >> /start.sh && \
+    echo 'nohup filebrowser -r / -p 8080 --no-auth > /var/log/fb.log 2>&1 &' >> /start.sh && \
+    echo '' >> /start.sh && \
+    # 2. Chạy Cloudflare Tunnel
+    echo 'echo "2. Dang ket noi Cloudflare..."' >> /start.sh && \
+    echo 'nohup cloudflared tunnel --url http://localhost:8080 > /var/log/cf.log 2>&1 &' >> /start.sh && \
+    echo '' >> /start.sh && \
+    # 3. Vòng lặp lấy Link (Đợi đến khi có link thì in ra)
+    echo 'echo "⏳ Dang lay link truy cap..."' >> /start.sh && \
     echo 'sleep 5' >> /start.sh && \
-    echo 'echo "=== THONG TIN NHAP VAO BITVISE (Doc ky) ==="' >> /start.sh && \
-    # Lọc log để lấy port
-    echo 'PORT=$(grep -o "remote_port=[0-9]*" /var/log/bore.log | head -n1 | cut -d= -f2)' >> /start.sh && \
-    echo 'echo "👉 Host: bore.pub"' >> /start.sh && \
-    echo 'echo "👉 Port: $PORT"' >> /start.sh && \
-    echo 'echo "=========================================="' >> /start.sh && \
-    echo 'echo "Server dang chay..."' >> /start.sh && \
-    echo 'tail -f /var/log/bore.log & python3 -m http.server 8080' >> /start.sh && \
+    echo 'while true; do' >> /start.sh && \
+    echo '  LINK=$(grep -o "https://.*\.trycloudflare.com" /var/log/cf.log | head -n 1)' >> /start.sh && \
+    echo '  if [ ! -z "$LINK" ]; then' >> /start.sh && \
+    echo '    echo "=========================================================="' >> /start.sh && \
+    echo '    echo "✅ SERVER SANS SANG! TRUY CAP LINK DUOI DAY (Full Quyen):"' >> /start.sh && \
+    echo '    echo ""' >> /start.sh && \
+    echo "    echo \"👉 \$LINK\"" >> /start.sh && \
+    echo '    echo ""' >> /start.sh && \
+    echo '    echo "=========================================================="' >> /start.sh && \
+    echo '    break' >> /start.sh && \
+    echo '  fi' >> /start.sh && \
+    echo '  sleep 2' >> /start.sh && \
+    echo 'done' >> /start.sh && \
+    # Giữ container chạy mãi mãi
+    echo 'tail -f /var/log/cf.log' >> /start.sh && \
     chmod +x /start.sh
 
-# 5. Chạy
-EXPOSE 8080 22
+# --- 6. CHẠY ---
+EXPOSE 8080
 CMD ["/start.sh"]
